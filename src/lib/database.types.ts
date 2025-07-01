@@ -63,7 +63,7 @@ export type CategoryWithSubcategories = Category & {
   subcategories: Subcategory[];
 };
 
-// Legacy Database interface for compatibility
+// Supabase Database interface
 export interface Database {
   public: {
     Tables: {

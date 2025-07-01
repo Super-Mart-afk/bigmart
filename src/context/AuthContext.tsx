@@ -1,8 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useUser, useAuth as useClerkAuth } from '@clerk/clerk-react';
-import { db } from '../lib/db';
-import { profiles } from '../lib/schema';
-import { eq } from 'drizzle-orm';
+import { supabase } from '../lib/supabase';
 import type { Profile } from '../lib/database.types';
 
 interface User extends Profile {
@@ -52,14 +50,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const fetchOrCreateUserProfile = async (clerkUser: any) => {
     try {
       // Try to fetch existing profile
-      const existingProfile = await db
-        .select()
-        .from(profiles)
-        .where(eq(profiles.id, clerkUser.id))
-        .limit(1);
+      const { data: existingProfile, error: fetchError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', clerkUser.id)
+        .single();
 
-      if (existingProfile.length > 0) {
-        setUser({ ...existingProfile[0], clerkUser });
+      if (existingProfile && !fetchError) {
+        setUser({ ...existingProfile, clerkUser });
       } else {
         // Create new profile
         const newProfile = {
@@ -68,13 +66,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           name: clerkUser.fullName || clerkUser.firstName || 'User',
           role: 'customer' as const,
           status: 'active',
-          avatarUrl: clerkUser.imageUrl || null,
+          avatar_url: clerkUser.imageUrl || null,
           phone: clerkUser.phoneNumbers[0]?.phoneNumber || null,
           address: null,
         };
 
-        await db.insert(profiles).values(newProfile);
-        setUser({ ...newProfile, clerkUser });
+        const { data: createdProfile, error: createError } = await supabase
+          .from('profiles')
+          .insert(newProfile)
+          .select()
+          .single();
+
+        if (createdProfile && !createError) {
+          setUser({ ...createdProfile, clerkUser });
+        }
       }
     } catch (error) {
       console.error('Error fetching/creating profile:', error);
@@ -104,14 +109,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (!user) return false;
 
     try {
-      await db
-        .update(profiles)
-        .set(updates)
-        .where(eq(profiles.id, user.id));
+      const { data, error } = await supabase
+        .from('profiles')
+        .update(updates)
+        .eq('id', user.id)
+        .select()
+        .single();
 
-      // Update local user state
-      setUser(prev => prev ? { ...prev, ...updates } : null);
-      return true;
+      if (data && !error) {
+        setUser(prev => prev ? { ...prev, ...data } : null);
+        return true;
+      }
+      return false;
     } catch (error) {
       console.error('Profile update error:', error);
       return false;

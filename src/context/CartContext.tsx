@@ -1,7 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { db } from '../lib/db';
-import { cartItems, products, profiles, categories, subcategories } from '../lib/schema';
-import { eq, and } from 'drizzle-orm';
+import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 import type { CartItemWithProduct, ProductWithRelations } from '../lib/database.types';
 import { nanoid } from 'nanoid';
@@ -49,49 +47,31 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
 
     setIsLoading(true);
     try {
-      const result = await db
-        .select({
-          id: cartItems.id,
-          userId: cartItems.userId,
-          productId: cartItems.productId,
-          quantity: cartItems.quantity,
-          createdAt: cartItems.createdAt,
-          updatedAt: cartItems.updatedAt,
-          product: {
-            id: products.id,
-            vendorId: products.vendorId,
-            title: products.title,
-            description: products.description,
-            price: products.price,
-            originalPrice: products.originalPrice,
-            images: products.images,
-            categoryId: products.categoryId,
-            subcategoryId: products.subcategoryId,
-            purchaseUrl: products.purchaseUrl,
-            stock: products.stock,
-            tags: products.tags,
-            status: products.status,
-            createdAt: products.createdAt,
-            updatedAt: products.updatedAt,
-            vendor_name: profiles.name,
-            category_name: categories.name,
-            subcategory_name: subcategories.name,
-          }
-        })
-        .from(cartItems)
-        .leftJoin(products, eq(cartItems.productId, products.id))
-        .leftJoin(profiles, eq(products.vendorId, profiles.id))
-        .leftJoin(categories, eq(products.categoryId, categories.id))
-        .leftJoin(subcategories, eq(products.subcategoryId, subcategories.id))
-        .where(eq(cartItems.userId, user.id));
+      const { data: cartData, error } = await supabase
+        .from('cart_items')
+        .select(`
+          *,
+          product:products(
+            *,
+            vendor:profiles!products_vendor_id_fkey(name),
+            category:categories(name),
+            subcategory:subcategories(name)
+          )
+        `)
+        .eq('user_id', user.id);
 
-      const formattedItems = result.map(item => ({
+      if (error) {
+        console.error('Error fetching cart items:', error);
+        return;
+      }
+
+      const formattedItems = (cartData || []).map(item => ({
         ...item,
         product: {
           ...item.product,
-          vendor_name: item.product.vendor_name || 'Unknown Vendor',
-          category_name: item.product.category_name || 'Unknown Category',
-          subcategory_name: item.product.subcategory_name || 'Unknown Subcategory',
+          vendor_name: item.product?.vendor?.name || 'Unknown Vendor',
+          category_name: item.product?.category?.name || 'Unknown Category',
+          subcategory_name: item.product?.subcategory?.name || 'Unknown Subcategory',
         }
       })) as CartItemWithProduct[];
 
@@ -108,19 +88,26 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
 
     try {
       // Check if item already exists in cart
-      const existingItem = items.find(item => item.productId === productId);
+      const existingItem = items.find(item => item.product_id === productId);
 
       if (existingItem) {
         // Update quantity
         return await updateQuantity(productId, existingItem.quantity + quantity);
       } else {
         // Add new item
-        await db.insert(cartItems).values({
-          id: nanoid(),
-          userId: user.id,
-          productId,
-          quantity,
-        });
+        const { error } = await supabase
+          .from('cart_items')
+          .insert({
+            id: nanoid(),
+            user_id: user.id,
+            product_id: productId,
+            quantity,
+          });
+
+        if (error) {
+          console.error('Error adding to cart:', error);
+          return false;
+        }
 
         await fetchCartItems();
         return true;
@@ -135,14 +122,18 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     if (!user) return false;
 
     try {
-      await db
-        .delete(cartItems)
-        .where(and(
-          eq(cartItems.userId, user.id),
-          eq(cartItems.productId, productId)
-        ));
+      const { error } = await supabase
+        .from('cart_items')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('product_id', productId);
 
-      setItems(prev => prev.filter(item => item.productId !== productId));
+      if (error) {
+        console.error('Error removing from cart:', error);
+        return false;
+      }
+
+      setItems(prev => prev.filter(item => item.product_id !== productId));
       return true;
     } catch (error) {
       console.error('Error removing from cart:', error);
@@ -158,17 +149,20 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     }
 
     try {
-      await db
-        .update(cartItems)
-        .set({ quantity })
-        .where(and(
-          eq(cartItems.userId, user.id),
-          eq(cartItems.productId, productId)
-        ));
+      const { error } = await supabase
+        .from('cart_items')
+        .update({ quantity })
+        .eq('user_id', user.id)
+        .eq('product_id', productId);
+
+      if (error) {
+        console.error('Error updating cart quantity:', error);
+        return false;
+      }
 
       setItems(prev =>
         prev.map(item =>
-          item.productId === productId ? { ...item, quantity } : item
+          item.product_id === productId ? { ...item, quantity } : item
         )
       );
       return true;
@@ -182,9 +176,15 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     if (!user) return false;
 
     try {
-      await db
-        .delete(cartItems)
-        .where(eq(cartItems.userId, user.id));
+      const { error } = await supabase
+        .from('cart_items')
+        .delete()
+        .eq('user_id', user.id);
+
+      if (error) {
+        console.error('Error clearing cart:', error);
+        return false;
+      }
 
       setItems([]);
       return true;

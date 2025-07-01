@@ -1,7 +1,5 @@
 import { useState, useEffect } from 'react';
-import { db } from '../lib/db';
-import { categories, subcategories } from '../lib/schema';
-import { eq } from 'drizzle-orm';
+import { supabase } from '../lib/supabase';
 import type { CategoryWithSubcategories } from '../lib/database.types';
 
 export const useCategories = () => {
@@ -17,25 +15,21 @@ export const useCategories = () => {
     try {
       setIsLoading(true);
       
-      // Fetch categories
-      const categoriesResult = await db.select().from(categories);
-      
-      // Fetch subcategories for each category
-      const categoriesWithSubs = await Promise.all(
-        categoriesResult.map(async (category) => {
-          const subcategoriesResult = await db
-            .select()
-            .from(subcategories)
-            .where(eq(subcategories.categoryId, category.id));
-          
-          return {
-            ...category,
-            subcategories: subcategoriesResult,
-          };
-        })
-      );
+      // Fetch categories with subcategories
+      const { data: categoriesResult, error: categoriesError } = await supabase
+        .from('categories')
+        .select(`
+          *,
+          subcategories(*)
+        `);
 
-      setCategoriesData(categoriesWithSubs);
+      if (categoriesError) {
+        setError('Failed to fetch categories');
+        console.error('Error fetching categories:', categoriesError);
+        return;
+      }
+
+      setCategoriesData(categoriesResult || []);
     } catch (err) {
       setError('Failed to fetch categories');
       console.error('Error fetching categories:', err);

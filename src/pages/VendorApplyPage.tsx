@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { User, Mail, Phone, Building, FileText, MapPin, Briefcase } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
+import { nanoid } from 'nanoid';
 
 interface VendorApplyPageProps {
   onNavigate: (page: string) => void;
@@ -45,6 +46,7 @@ const VendorApplyPage: React.FC<VendorApplyPageProps> = ({ onNavigate }) => {
       const { error: submitError } = await supabase
         .from('vendor_applications')
         .insert({
+          id: nanoid(),
           user_id: user.id,
           applicant_name: formData.applicantName,
           email: formData.email,

@@ -1,28 +1,28 @@
-import { mysqlTable, varchar, text, decimal, int, timestamp, json, mysqlEnum, boolean, primaryKey, index } from 'drizzle-orm/mysql-core';
+import { pgTable, varchar, text, decimal, integer, timestamp, json, pgEnum, boolean, index, uuid } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
 // Enums
-export const userRoleEnum = mysqlEnum('user_role', ['customer', 'vendor', 'admin']);
-export const applicationStatusEnum = mysqlEnum('application_status', ['pending', 'approved', 'rejected']);
-export const productStatusEnum = mysqlEnum('product_status', ['active', 'inactive', 'pending']);
-export const orderStatusEnum = mysqlEnum('order_status', ['pending', 'processing', 'shipped', 'delivered', 'cancelled']);
+export const userRoleEnum = pgEnum('user_role', ['customer', 'vendor', 'admin']);
+export const applicationStatusEnum = pgEnum('application_status', ['pending', 'approved', 'rejected']);
+export const productStatusEnum = pgEnum('product_status', ['active', 'inactive', 'pending']);
+export const orderStatusEnum = pgEnum('order_status', ['pending', 'processing', 'shipped', 'delivered', 'cancelled']);
 
 // Profiles table
-export const profiles = mysqlTable('profiles', {
+export const profiles = pgTable('profiles', {
   id: varchar('id', { length: 255 }).primaryKey(),
   email: varchar('email', { length: 255 }).notNull().unique(),
   name: varchar('name', { length: 255 }).notNull(),
-  role: userRoleEnum.default('customer'),
+  role: userRoleEnum('role').default('customer'),
   status: varchar('status', { length: 50 }).default('active'),
   avatarUrl: text('avatar_url'),
   phone: varchar('phone', { length: 50 }),
   address: text('address'),
   createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
 });
 
 // Categories table
-export const categories = mysqlTable('categories', {
+export const categories = pgTable('categories', {
   id: varchar('id', { length: 255 }).primaryKey(),
   name: varchar('name', { length: 255 }).notNull(),
   slug: varchar('slug', { length: 255 }).notNull().unique(),
@@ -32,7 +32,7 @@ export const categories = mysqlTable('categories', {
 });
 
 // Subcategories table
-export const subcategories = mysqlTable('subcategories', {
+export const subcategories = pgTable('subcategories', {
   id: varchar('id', { length: 255 }).primaryKey(),
   categoryId: varchar('category_id', { length: 255 }).notNull(),
   name: varchar('name', { length: 255 }).notNull(),
@@ -43,7 +43,7 @@ export const subcategories = mysqlTable('subcategories', {
 }));
 
 // Vendor applications table
-export const vendorApplications = mysqlTable('vendor_applications', {
+export const vendorApplications = pgTable('vendor_applications', {
   id: varchar('id', { length: 255 }).primaryKey(),
   userId: varchar('user_id', { length: 255 }).notNull(),
   applicantName: varchar('applicant_name', { length: 255 }).notNull(),
@@ -54,7 +54,7 @@ export const vendorApplications = mysqlTable('vendor_applications', {
   description: text('description').notNull(),
   experience: text('experience'),
   address: text('address').notNull(),
-  status: applicationStatusEnum.default('pending'),
+  status: applicationStatusEnum('status').default('pending'),
   notes: text('notes'),
   reviewedBy: varchar('reviewed_by', { length: 255 }),
   reviewedAt: timestamp('reviewed_at'),
@@ -65,7 +65,7 @@ export const vendorApplications = mysqlTable('vendor_applications', {
 }));
 
 // Products table
-export const products = mysqlTable('products', {
+export const products = pgTable('products', {
   id: varchar('id', { length: 255 }).primaryKey(),
   vendorId: varchar('vendor_id', { length: 255 }).notNull(),
   title: varchar('title', { length: 500 }).notNull(),
@@ -76,11 +76,11 @@ export const products = mysqlTable('products', {
   categoryId: varchar('category_id', { length: 255 }),
   subcategoryId: varchar('subcategory_id', { length: 255 }),
   purchaseUrl: text('purchase_url').notNull(),
-  stock: int('stock').default(0),
+  stock: integer('stock').default(0),
   tags: json('tags').$type<string[]>().default([]),
-  status: productStatusEnum.default('pending'),
+  status: productStatusEnum('status').default('pending'),
   createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => ({
   vendorIdx: index('vendor_idx').on(table.vendorId),
   categoryIdx: index('category_idx').on(table.categoryId),
@@ -88,26 +88,26 @@ export const products = mysqlTable('products', {
 }));
 
 // Orders table
-export const orders = mysqlTable('orders', {
+export const orders = pgTable('orders', {
   id: varchar('id', { length: 255 }).primaryKey(),
   customerId: varchar('customer_id', { length: 255 }).notNull(),
   total: decimal('total', { precision: 10, scale: 2 }).notNull(),
-  status: orderStatusEnum.default('pending'),
+  status: orderStatusEnum('status').default('pending'),
   shippingAddress: text('shipping_address').notNull(),
   notes: text('notes'),
   createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => ({
   customerIdx: index('customer_idx').on(table.customerId),
   statusIdx: index('status_idx').on(table.status),
 }));
 
 // Order items table
-export const orderItems = mysqlTable('order_items', {
+export const orderItems = pgTable('order_items', {
   id: varchar('id', { length: 255 }).primaryKey(),
   orderId: varchar('order_id', { length: 255 }).notNull(),
   productId: varchar('product_id', { length: 255 }).notNull(),
-  quantity: int('quantity').notNull(),
+  quantity: integer('quantity').notNull(),
   price: decimal('price', { precision: 10, scale: 2 }).notNull(),
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => ({
@@ -116,13 +116,13 @@ export const orderItems = mysqlTable('order_items', {
 }));
 
 // Cart items table
-export const cartItems = mysqlTable('cart_items', {
+export const cartItems = pgTable('cart_items', {
   id: varchar('id', { length: 255 }).primaryKey(),
   userId: varchar('user_id', { length: 255 }).notNull(),
   productId: varchar('product_id', { length: 255 }).notNull(),
-  quantity: int('quantity').notNull(),
+  quantity: integer('quantity').notNull(),
   createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => ({
   userProductIdx: index('user_product_idx').on(table.userId, table.productId),
 }));
