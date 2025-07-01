@@ -1,13 +1,11 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
-import { Database } from '../lib/database.types';
-
-type Category = Database['public']['Tables']['categories']['Row'] & {
-  subcategories: Database['public']['Tables']['subcategories']['Row'][];
-};
+import { db } from '../lib/db';
+import { categories, subcategories } from '../lib/schema';
+import { eq } from 'drizzle-orm';
+import type { CategoryWithSubcategories } from '../lib/database.types';
 
 export const useCategories = () => {
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [categoriesData, setCategoriesData] = useState<CategoryWithSubcategories[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -18,20 +16,26 @@ export const useCategories = () => {
   const fetchCategories = async () => {
     try {
       setIsLoading(true);
-      const { data, error } = await supabase
-        .from('categories')
-        .select(`
-          *,
-          subcategories (*)
-        `)
-        .order('name');
+      
+      // Fetch categories
+      const categoriesResult = await db.select().from(categories);
+      
+      // Fetch subcategories for each category
+      const categoriesWithSubs = await Promise.all(
+        categoriesResult.map(async (category) => {
+          const subcategoriesResult = await db
+            .select()
+            .from(subcategories)
+            .where(eq(subcategories.categoryId, category.id));
+          
+          return {
+            ...category,
+            subcategories: subcategoriesResult,
+          };
+        })
+      );
 
-      if (error) {
-        setError(error.message);
-        return;
-      }
-
-      setCategories(data || []);
+      setCategoriesData(categoriesWithSubs);
     } catch (err) {
       setError('Failed to fetch categories');
       console.error('Error fetching categories:', err);
@@ -40,5 +44,10 @@ export const useCategories = () => {
     }
   };
 
-  return { categories, isLoading, error, refetch: fetchCategories };
+  return { 
+    categories: categoriesData, 
+    isLoading, 
+    error, 
+    refetch: fetchCategories 
+  };
 };

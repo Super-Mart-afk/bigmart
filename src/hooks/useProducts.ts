@@ -1,12 +1,8 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
-import { Database } from '../lib/database.types';
-
-type Product = Database['public']['Tables']['products']['Row'] & {
-  vendor_name?: string;
-  category_name?: string;
-  subcategory_name?: string;
-};
+import { db } from '../lib/db';
+import { products, profiles, categories, subcategories } from '../lib/schema';
+import { eq, and, desc } from 'drizzle-orm';
+import type { ProductWithRelations } from '../lib/database.types';
 
 interface UseProductsOptions {
   categoryId?: string;
@@ -17,7 +13,7 @@ interface UseProductsOptions {
 }
 
 export const useProducts = (options: UseProductsOptions = {}) => {
-  const [products, setProducts] = useState<Product[]>([]);
+  const [productsData, setProductsData] = useState<ProductWithRelations[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,51 +24,68 @@ export const useProducts = (options: UseProductsOptions = {}) => {
   const fetchProducts = async () => {
     try {
       setIsLoading(true);
-      let query = supabase
-        .from('products')
-        .select(`
-          *,
-          vendor_name:profiles!products_vendor_id_fkey(name),
-          category_name:categories(name),
-          subcategory_name:subcategories(name)
-        `);
+      
+      let query = db
+        .select({
+          id: products.id,
+          vendorId: products.vendorId,
+          title: products.title,
+          description: products.description,
+          price: products.price,
+          originalPrice: products.originalPrice,
+          images: products.images,
+          categoryId: products.categoryId,
+          subcategoryId: products.subcategoryId,
+          purchaseUrl: products.purchaseUrl,
+          stock: products.stock,
+          tags: products.tags,
+          status: products.status,
+          createdAt: products.createdAt,
+          updatedAt: products.updatedAt,
+          vendor_name: profiles.name,
+          category_name: categories.name,
+          subcategory_name: subcategories.name,
+        })
+        .from(products)
+        .leftJoin(profiles, eq(products.vendorId, profiles.id))
+        .leftJoin(categories, eq(products.categoryId, categories.id))
+        .leftJoin(subcategories, eq(products.subcategoryId, subcategories.id));
 
       // Apply filters
+      const conditions = [];
       if (options.categoryId) {
-        query = query.eq('category_id', options.categoryId);
+        conditions.push(eq(products.categoryId, options.categoryId));
       }
       if (options.subcategoryId) {
-        query = query.eq('subcategory_id', options.subcategoryId);
+        conditions.push(eq(products.subcategoryId, options.subcategoryId));
       }
       if (options.vendorId) {
-        query = query.eq('vendor_id', options.vendorId);
+        conditions.push(eq(products.vendorId, options.vendorId));
       }
       if (options.status) {
-        query = query.eq('status', options.status);
+        conditions.push(eq(products.status, options.status));
       }
 
-      // Apply limit
+      if (conditions.length > 0) {
+        query = query.where(and(...conditions));
+      }
+
+      query = query.orderBy(desc(products.createdAt));
+
       if (options.limit) {
         query = query.limit(options.limit);
       }
 
-      query = query.order('created_at', { ascending: false });
+      const result = await query;
 
-      const { data, error } = await query;
-
-      if (error) {
-        setError(error.message);
-        return;
-      }
-
-      const formattedProducts = data?.map(product => ({
+      const formattedProducts = result.map(product => ({
         ...product,
-        vendor_name: product.vendor_name?.name || 'Unknown Vendor',
-        category_name: product.category_name?.name || 'Unknown Category',
-        subcategory_name: product.subcategory_name?.name || 'Unknown Subcategory',
-      })) || [];
+        vendor_name: product.vendor_name || 'Unknown Vendor',
+        category_name: product.category_name || 'Unknown Category',
+        subcategory_name: product.subcategory_name || 'Unknown Subcategory',
+      }));
 
-      setProducts(formattedProducts);
+      setProductsData(formattedProducts);
     } catch (err) {
       setError('Failed to fetch products');
       console.error('Error fetching products:', err);
@@ -81,5 +94,10 @@ export const useProducts = (options: UseProductsOptions = {}) => {
     }
   };
 
-  return { products, isLoading, error, refetch: fetchProducts };
+  return { 
+    products: productsData, 
+    isLoading, 
+    error, 
+    refetch: fetchProducts 
+  };
 };

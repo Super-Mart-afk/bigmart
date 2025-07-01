@@ -1,12 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User as SupabaseUser } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
-import { Database } from '../lib/database.types';
-
-type Profile = Database['public']['Tables']['profiles']['Row'];
+import { useUser, useAuth as useClerkAuth } from '@clerk/clerk-react';
+import { db } from '../lib/db';
+import { profiles } from '../lib/schema';
+import { eq } from 'drizzle-orm';
+import type { Profile } from '../lib/database.types';
 
 interface User extends Profile {
-  supabaseUser: SupabaseUser;
+  clerkUser: any;
 }
 
 interface AuthContextType {
@@ -33,120 +33,70 @@ interface AuthProviderProps {
 }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+  const { user: clerkUser, isLoaded } = useUser();
+  const { signOut } = useClerkAuth();
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        fetchUserProfile(session.user);
-      } else {
-        setIsLoading(false);
-      }
-    });
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user) {
-        await fetchUserProfile(session.user);
+    if (isLoaded) {
+      if (clerkUser) {
+        fetchOrCreateUserProfile(clerkUser);
       } else {
         setUser(null);
         setIsLoading(false);
       }
-    });
+    }
+  }, [clerkUser, isLoaded]);
 
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const fetchUserProfile = async (supabaseUser: SupabaseUser) => {
+  const fetchOrCreateUserProfile = async (clerkUser: any) => {
     try {
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', supabaseUser.id)
-        .single();
+      // Try to fetch existing profile
+      const existingProfile = await db
+        .select()
+        .from(profiles)
+        .where(eq(profiles.id, clerkUser.id))
+        .limit(1);
 
-      if (error) {
-        console.error('Error fetching profile:', error);
-        setIsLoading(false);
-        return;
-      }
+      if (existingProfile.length > 0) {
+        setUser({ ...existingProfile[0], clerkUser });
+      } else {
+        // Create new profile
+        const newProfile = {
+          id: clerkUser.id,
+          email: clerkUser.emailAddresses[0]?.emailAddress || '',
+          name: clerkUser.fullName || clerkUser.firstName || 'User',
+          role: 'customer' as const,
+          status: 'active',
+          avatarUrl: clerkUser.imageUrl || null,
+          phone: clerkUser.phoneNumbers[0]?.phoneNumber || null,
+          address: null,
+        };
 
-      if (profile) {
-        setUser({ ...profile, supabaseUser });
+        await db.insert(profiles).values(newProfile);
+        setUser({ ...newProfile, clerkUser });
       }
     } catch (error) {
-      console.error('Error in fetchUserProfile:', error);
+      console.error('Error fetching/creating profile:', error);
     } finally {
       setIsLoading(false);
     }
   };
 
   const login = async (email: string, password: string): Promise<boolean> => {
-    setIsLoading(true);
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) {
-        console.error('Login error:', error);
-        setIsLoading(false);
-        return false;
-      }
-
-      if (data.user) {
-        await fetchUserProfile(data.user);
-        return true;
-      }
-      
-      setIsLoading(false);
-      return false;
-    } catch (error) {
-      console.error('Login error:', error);
-      setIsLoading(false);
-      return false;
-    }
+    // Clerk handles authentication through their components
+    // This is kept for compatibility but won't be used directly
+    return false;
   };
 
   const register = async (email: string, password: string, name: string): Promise<boolean> => {
-    setIsLoading(true);
-    try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            name,
-          },
-        },
-      });
-
-      if (error) {
-        console.error('Registration error:', error);
-        setIsLoading(false);
-        return false;
-      }
-
-      if (data.user) {
-        // Profile will be created automatically by the trigger
-        await fetchUserProfile(data.user);
-        return true;
-      }
-      
-      setIsLoading(false);
-      return false;
-    } catch (error) {
-      console.error('Registration error:', error);
-      setIsLoading(false);
-      return false;
-    }
+    // Clerk handles registration through their components
+    // This is kept for compatibility but won't be used directly
+    return false;
   };
 
   const logout = async (): Promise<void> => {
-    await supabase.auth.signOut();
+    await signOut();
     setUser(null);
   };
 
@@ -154,15 +104,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (!user) return false;
 
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update(updates)
-        .eq('id', user.id);
-
-      if (error) {
-        console.error('Profile update error:', error);
-        return false;
-      }
+      await db
+        .update(profiles)
+        .set(updates)
+        .where(eq(profiles.id, user.id));
 
       // Update local user state
       setUser(prev => prev ? { ...prev, ...updates } : null);

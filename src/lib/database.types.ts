@@ -1,303 +1,124 @@
-export type Json =
-  | string
-  | number
-  | boolean
-  | null
-  | { [key: string]: Json | undefined }
-  | Json[]
+import type { InferSelectModel, InferInsertModel } from 'drizzle-orm';
+import * as schema from './schema';
 
+// Export types for all tables
+export type Profile = InferSelectModel<typeof schema.profiles>;
+export type NewProfile = InferInsertModel<typeof schema.profiles>;
+
+export type Category = InferSelectModel<typeof schema.categories>;
+export type NewCategory = InferInsertModel<typeof schema.categories>;
+
+export type Subcategory = InferSelectModel<typeof schema.subcategories>;
+export type NewSubcategory = InferInsertModel<typeof schema.subcategories>;
+
+export type Product = InferSelectModel<typeof schema.products>;
+export type NewProduct = InferInsertModel<typeof schema.products>;
+
+export type Order = InferSelectModel<typeof schema.orders>;
+export type NewOrder = InferInsertModel<typeof schema.orders>;
+
+export type OrderItem = InferSelectModel<typeof schema.orderItems>;
+export type NewOrderItem = InferInsertModel<typeof schema.orderItems>;
+
+export type CartItem = InferSelectModel<typeof schema.cartItems>;
+export type NewCartItem = InferInsertModel<typeof schema.cartItems>;
+
+export type VendorApplication = InferSelectModel<typeof schema.vendorApplications>;
+export type NewVendorApplication = InferInsertModel<typeof schema.vendorApplications>;
+
+// Extended types with relations
+export type ProductWithRelations = Product & {
+  vendor?: Profile;
+  category?: Category;
+  subcategory?: Subcategory;
+  vendor_name?: string;
+  category_name?: string;
+  subcategory_name?: string;
+};
+
+export type OrderWithRelations = Order & {
+  customer?: Profile;
+  orderItems?: (OrderItem & { product?: Product })[];
+  customer_profile?: {
+    name: string;
+    email: string;
+  };
+};
+
+export type VendorApplicationWithRelations = VendorApplication & {
+  applicant_profile?: {
+    name: string;
+    email: string;
+  };
+  reviewer_profile?: {
+    name: string;
+  };
+};
+
+export type CartItemWithProduct = CartItem & {
+  product: ProductWithRelations;
+};
+
+export type CategoryWithSubcategories = Category & {
+  subcategories: Subcategory[];
+};
+
+// Legacy Database interface for compatibility
 export interface Database {
   public: {
     Tables: {
       profiles: {
-        Row: {
-          id: string
-          email: string
-          name: string
-          role: 'customer' | 'vendor' | 'admin'
-          status: string
-          avatar_url: string | null
-          phone: string | null
-          address: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id: string
-          email: string
-          name: string
-          role?: 'customer' | 'vendor' | 'admin'
-          status?: string
-          avatar_url?: string | null
-          phone?: string | null
-          address?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          email?: string
-          name?: string
-          role?: 'customer' | 'vendor' | 'admin'
-          status?: string
-          avatar_url?: string | null
-          phone?: string | null
-          address?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-      }
+        Row: Profile;
+        Insert: NewProfile;
+        Update: Partial<NewProfile>;
+      };
       categories: {
-        Row: {
-          id: string
-          name: string
-          slug: string
-          icon: string
-          description: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          name: string
-          slug: string
-          icon: string
-          description?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          name?: string
-          slug?: string
-          icon?: string
-          description?: string | null
-          created_at?: string
-        }
-      }
+        Row: Category;
+        Insert: NewCategory;
+        Update: Partial<NewCategory>;
+      };
       subcategories: {
-        Row: {
-          id: string
-          category_id: string
-          name: string
-          slug: string
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          category_id: string
-          name: string
-          slug: string
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          category_id?: string
-          name?: string
-          slug?: string
-          created_at?: string
-        }
-      }
-      vendor_applications: {
-        Row: {
-          id: string
-          user_id: string
-          applicant_name: string
-          email: string
-          phone: string
-          business_name: string
-          business_type: string
-          description: string
-          experience: string | null
-          address: string
-          status: 'pending' | 'approved' | 'rejected'
-          notes: string | null
-          reviewed_by: string | null
-          reviewed_at: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          applicant_name: string
-          email: string
-          phone: string
-          business_name: string
-          business_type: string
-          description: string
-          experience?: string | null
-          address: string
-          status?: 'pending' | 'approved' | 'rejected'
-          notes?: string | null
-          reviewed_by?: string | null
-          reviewed_at?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          applicant_name?: string
-          email?: string
-          phone?: string
-          business_name?: string
-          business_type?: string
-          description?: string
-          experience?: string | null
-          address?: string
-          status?: 'pending' | 'approved' | 'rejected'
-          notes?: string | null
-          reviewed_by?: string | null
-          reviewed_at?: string | null
-          created_at?: string
-        }
-      }
+        Row: Subcategory;
+        Insert: NewSubcategory;
+        Update: Partial<NewSubcategory>;
+      };
       products: {
-        Row: {
-          id: string
-          vendor_id: string
-          title: string
-          description: string
-          price: number
-          original_price: number | null
-          images: string[]
-          category_id: string | null
-          subcategory_id: string | null
-          purchase_url: string
-          stock: number
-          tags: string[]
-          status: 'active' | 'inactive' | 'pending'
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          vendor_id: string
-          title: string
-          description: string
-          price: number
-          original_price?: number | null
-          images?: string[]
-          category_id?: string | null
-          subcategory_id?: string | null
-          purchase_url: string
-          stock?: number
-          tags?: string[]
-          status?: 'active' | 'inactive' | 'pending'
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          vendor_id?: string
-          title?: string
-          description?: string
-          price?: number
-          original_price?: number | null
-          images?: string[]
-          category_id?: string | null
-          subcategory_id?: string | null
-          purchase_url?: string
-          stock?: number
-          tags?: string[]
-          status?: 'active' | 'inactive' | 'pending'
-          created_at?: string
-          updated_at?: string
-        }
-      }
+        Row: Product;
+        Insert: NewProduct;
+        Update: Partial<NewProduct>;
+      };
       orders: {
-        Row: {
-          id: string
-          customer_id: string
-          total: number
-          status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled'
-          shipping_address: string
-          notes: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          customer_id: string
-          total: number
-          status?: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled'
-          shipping_address: string
-          notes?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          customer_id?: string
-          total?: number
-          status?: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled'
-          shipping_address?: string
-          notes?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-      }
+        Row: Order;
+        Insert: NewOrder;
+        Update: Partial<NewOrder>;
+      };
       order_items: {
-        Row: {
-          id: string
-          order_id: string
-          product_id: string
-          quantity: number
-          price: number
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          order_id: string
-          product_id: string
-          quantity: number
-          price: number
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          order_id?: string
-          product_id?: string
-          quantity?: number
-          price?: number
-          created_at?: string
-        }
-      }
+        Row: OrderItem;
+        Insert: NewOrderItem;
+        Update: Partial<NewOrderItem>;
+      };
       cart_items: {
-        Row: {
-          id: string
-          user_id: string
-          product_id: string
-          quantity: number
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          product_id: string
-          quantity: number
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          product_id?: string
-          quantity?: number
-          created_at?: string
-          updated_at?: string
-        }
-      }
-    }
+        Row: CartItem;
+        Insert: NewCartItem;
+        Update: Partial<NewCartItem>;
+      };
+      vendor_applications: {
+        Row: VendorApplication;
+        Insert: NewVendorApplication;
+        Update: Partial<NewVendorApplication>;
+      };
+    };
     Views: {
-      [_ in never]: never
-    }
+      [_ in never]: never;
+    };
     Functions: {
-      [_ in never]: never
-    }
+      [_ in never]: never;
+    };
     Enums: {
-      user_role: 'customer' | 'vendor' | 'admin'
-      application_status: 'pending' | 'approved' | 'rejected'
-      product_status: 'active' | 'inactive' | 'pending'
-      order_status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled'
-    }
-  }
+      user_role: 'customer' | 'vendor' | 'admin';
+      application_status: 'pending' | 'approved' | 'rejected';
+      product_status: 'active' | 'inactive' | 'pending';
+      order_status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
+    };
+  };
 }
